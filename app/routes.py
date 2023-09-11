@@ -1,9 +1,16 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request,current_app,send_from_directory
 from .models import User, Post
-from flask_jwt_extended import create_access_token, jwt_required
-from . import db
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from . import db, photos
+from werkzeug.utils import secure_filename
+import os
+from flask import current_app
+import re
 
 main = Blueprint('main', __name__)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
 @main.route('/login', methods=['POST'])
 def login():
@@ -16,13 +23,11 @@ def login():
 
     user = User.query.filter_by(email=email).first()
 
-    # Use the check_password method to verify the password
     if user and user.check_password(password):
-        access_token = create_access_token(identity=user.id)  # Create the token
-        return jsonify({'access_token': access_token,'user_id': user.id }), 200
+        access_token = create_access_token(identity=user.id)
+        return jsonify({'access_token': access_token, 'user_id': user.id }), 200
     else:
         return jsonify({'message': 'Invalid credentials!'}), 401
-
 
 @main.route('/register', methods=['POST'])
 def register():
@@ -32,16 +37,13 @@ def register():
     password = data['password']
     confirm_password = data['confirmPassword']
 
-    # Check if user already exists
     user = User.query.filter_by(email=email).first()
     if user:
         return jsonify({'message': 'User already exists!'}), 400
 
-    # Check password confirmation
     if password != confirm_password:
         return jsonify({'message': 'Passwords do not match!'}), 400
 
-    # Create new user and add to the database
     new_user = User(username=username, email=email)
     new_user.set_password(password)
     db.session.add(new_user)
@@ -64,7 +66,6 @@ def get_posts():
         'total_items': pagination.total
     }), 200
 
-
 @main.route('/posts/<int:post_id>', methods=['GET'])
 @jwt_required()
 def get_post(post_id):
@@ -74,11 +75,29 @@ def get_post(post_id):
 @main.route('/posts', methods=['POST'])
 @jwt_required()
 def create_post():
-    data = request.json
-    if not data.get('title') or not data.get('body') or not data.get('author_id'):
-        return jsonify({'message': 'Title, body, and author_id are required!'}), 400
-    post = Post(title=data['title'], body=data['body'], user_id=data['author_id'])
-    db.session.add(post)
-    db.session.commit()
-    return jsonify({'message': 'Post Created Successfully!'}), 201
+    data = request.form
+    title = data.get('title')
+    body = data.get('body')
+    user_id = get_jwt_identity()
 
+    # Handle image upload
+    image_filename = None
+    if 'image' in request.files:
+        image = request.files['image']
+        if image:
+            raw_filename = image.filename
+            sanitized_filename = raw_filename.replace(' ', '-')
+            sanitized_filename = re.sub(r'[^a-zA-Z0-9.\-_]', '', sanitized_filename)           
+            image.save(os.path.join(current_app.config['UPLOAD_FOLDER'], sanitized_filename))
+            image_filename = sanitized_filename
+    
+    new_post = Post(title=title, body=body, user_id=user_id, image_filename=image_filename)
+    
+    db.session.add(new_post)
+    db.session.commit()
+    
+    return jsonify({"message": "Post created", "post_id": new_post.id}), 201
+
+@main.route('/images/<filename>')
+def serve_image(filename):
+    return send_from_directory(os.path.join(current_app.config['UPLOAD_FOLDER']), filename)

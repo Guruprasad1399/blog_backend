@@ -31,6 +31,7 @@ class Post(db.Model):
     body = db.Column(db.String(140))
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    image_filename = db.Column(db.String(120), nullable=True)
 
     def to_dict(self):
         return {
@@ -38,5 +39,6 @@ class Post(db.Model):
             'title': self.title,
             'body': self.body,
             'timestamp': self.timestamp,
-            'author_id': self.user_id
+            'author_id': self.user_id,
+            'image_filename': self.image_filename
         }

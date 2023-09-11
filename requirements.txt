@@ -5,3 +5,7 @@ Werkzeug
 Flask-JWT-Extended
 Flask-CORS
 Flask-Migrate
+markupsafe
+jinja2
+Flask-Reuploaded
+SQLAlchemy == 1.4
